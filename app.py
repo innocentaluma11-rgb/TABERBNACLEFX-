@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 from typing import Any
 
@@ -15,6 +16,47 @@ def get_client() -> Composio:
             "Set COMPOSIO_API_KEY in .env before running this example."
         )
     return Composio(api_key=api_key)
+
+
+def print_result(value: Any) -> None:
+    """Print SDK objects in a useful, copy/paste-friendly form."""
+    try:
+        print(json.dumps(value, indent=2, default=str))
+    except TypeError:
+        print(value)
+
+
+def connect_github(client: Composio, user_id: str, wait: bool = True) -> Any:
+    """Start GitHub OAuth and optionally wait until the account is connected.
+
+    Composio has exposed this operation through slightly different method
+    signatures across SDK releases, so support both the keyword and positional
+    forms while keeping the rest of the example version-agnostic.
+    """
+    accounts = getattr(client, "connected_accounts", None)
+    initiate = getattr(accounts, "initiate", None)
+    if initiate is None:
+        raise RuntimeError(
+            "This Composio SDK does not expose connected_accounts.initiate. "
+            "Upgrade with `pip install --upgrade composio` and retry."
+        )
+
+    try:
+        request = initiate(user_id=user_id, toolkit="github")
+    except TypeError:
+        request = initiate(user_id, "github")
+
+    redirect_url = getattr(request, "redirect_url", None)
+    if redirect_url:
+        print(f"Open this URL to connect GitHub:\n{redirect_url}")
+
+    if wait:
+        wait_for_connection = getattr(request, "wait_for_connection", None)
+        if callable(wait_for_connection):
+            print_result(wait_for_connection())
+        else:
+            print("Finish the browser authorization, then run `python app.py repo`.")
+    return request
 
 
 def list_github_tools(client: Composio, user_id: str) -> Any:
@@ -36,7 +78,8 @@ def execute_first_available(
             last_error = exc
     raise RuntimeError(
         f"None of these GitHub tools worked: {', '.join(slugs)}. "
-        "Run `python app.py tools` and use the slug returned by Composio."
+        "Run `python app.py tools` and use the slug returned by Composio. "
+        "If the account is not connected, run `python app.py connect` first."
     ) from last_error
 
 
@@ -68,10 +111,13 @@ def create_issue(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Composio GitHub integration demo")
     parser.add_argument(
-        "action", choices=["tools", "repo", "issue"], nargs="?", default="repo"
+        "action", choices=["connect", "tools", "repo", "issue"], nargs="?", default="repo"
     )
     parser.add_argument("--title", help="Issue title (required for issue action)")
     parser.add_argument("--body", default="Created with Composio.")
+    parser.add_argument(
+        "--no-wait", action="store_true", help="Print the OAuth URL without waiting"
+    )
     args = parser.parse_args()
 
     user_id = os.getenv("COMPOSIO_USER_ID", "user-123")
@@ -79,14 +125,16 @@ def main() -> None:
     repo = os.getenv("GITHUB_REPO", "TABERBNACLEFX-")
     client = get_client()
 
-    if args.action == "tools":
-        print(list_github_tools(client, user_id))
+    if args.action == "connect":
+        connect_github(client, user_id, wait=not args.no_wait)
+    elif args.action == "tools":
+        print_result(list_github_tools(client, user_id))
     elif args.action == "repo":
-        print(get_repo_metadata(client, user_id, owner, repo))
+        print_result(get_repo_metadata(client, user_id, owner, repo))
     else:
         if not args.title:
             parser.error("--title is required when action is 'issue'")
-        print(create_issue(client, user_id, owner, repo, args.title, args.body))
+        print_result(create_issue(client, user_id, owner, repo, args.title, args.body))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # TABERBNACLEFX- + Composio GitHub
 
-This repo contains a small Python client for connecting Composio to GitHub. It can list the available GitHub tools, read repository metadata, and create an issue after you authorize GitHub in Composio.
+This repo contains a small Python client for connecting Composio to GitHub. It can start the GitHub OAuth flow, list the tools exposed to the connected account, read repository metadata, and create an issue.
 
 ## Setup
 
@@ -11,36 +11,41 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-In `.env`, set your Composio API key and connected-user ID:
+Set `COMPOSIO_API_KEY` in `.env`. Keep `.env` local; it is ignored by Git. `COMPOSIO_USER_ID` identifies the Composio user whose GitHub connection will be used.
 
-```env
-COMPOSIO_API_KEY=your_api_key_here
-COMPOSIO_USER_ID=user-123
-GITHUB_OWNER=innocentaluma11-rgb
-GITHUB_REPO=TABERBNACLEFX-
+## Connect GitHub
+
+Run:
+
+```bash
+python app.py connect
 ```
 
-In the Composio dashboard, connect the **GitHub** toolkit and authorize the GitHub account that should be used. Keep `.env` local; it is ignored by Git.
+Open the printed URL, authorize GitHub, and return to the terminal. To print the URL without waiting:
 
-## First real GitHub tool call
+```bash
+python app.py connect --no-wait
+```
 
-List the GitHub tools exposed to your connected account:
+## First real tool call
+
+After authorization, discover the GitHub tools available to your account:
 
 ```bash
 python app.py tools
 ```
 
-Then read this repository through Composio:
+Then make a real read call against this repository through Composio:
 
 ```bash
 python app.py repo
 ```
 
-The command uses the first compatible repository-read slug returned by the installed SDK (`GITHUB_GET_REPOSITORY`, `GITHUB_GET_REPO`, or `GITHUB_GET_REPOS`).
+The command tries the compatible repository-read slug returned by the installed SDK (`GITHUB_GET_REPOSITORY`, `GITHUB_GET_REPO`, or `GITHUB_GET_REPOS`).
 
-## Optional write call: create an issue
+## Optional write call
 
-After verifying the read call, create an issue:
+After verifying the read call, create an issue only when you intend to perform a real write:
 
 ```bash
 python app.py issue \
@@ -48,10 +53,9 @@ python app.py issue \
   --body "Created by the TABERBNACLEFX- Composio GitHub demo."
 ```
 
-This performs a real write against `GITHUB_OWNER/GITHUB_REPO`, so only run it when you intend to create the issue.
-
 ## Troubleshooting
 
-- If authentication fails, reconnect GitHub in Composio and verify `COMPOSIO_USER_ID`.
+- If `connect` is unavailable, upgrade the SDK: `pip install --upgrade composio`.
+- If authentication fails, reconnect GitHub and verify `COMPOSIO_USER_ID`.
 - If a tool name is not found, run `python app.py tools` and use the exact slug shown by your SDK version.
 - Never commit `COMPOSIO_API_KEY` or `.env`.
