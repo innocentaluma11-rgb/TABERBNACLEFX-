@@ -1,92 +1,68 @@
-# TABERBNACLEFX- + Composio GitHub + MT5 + social architecture
+# Paper deployment: MT5 execution, audit log, and scheduler
 
-This repo now includes a layered architecture for a disciplined trading-and-publishing workflow:
+The deployment pieces are now included:
 
-- `mt5_service.py` reads market/account information, with a read-only demo fallback when MT5 is not installed or connected.
-- `claude_service.py` produces a structured recommendation from the market and account context.
-- `risk_policy.py` gate-keeps the recommendation with a conservative safety model.
-- `workflow.py` orchestrates the end-to-end decision path and blocks unsafe actions.
-- `social_workflow.py` handles the Composio social-tool OAuth and publish flow.
+- `mt5_execution.py`: demo-only MT5 order path with a separate execution approval token.
+- `audit_log.py`: append-only SQLite audit log at `data/audit.sqlite3`.
+- `scheduler.py`: recurring market checks with `--once` support for testing.
+- `run_paper_trading.bat`: Windows startup command for the scheduler.
 
-## Safe control flow
+## Install on the Windows MT5 host
 
-1. Read market + account state from MT5 or demo data.
-2. Ask Claude for a structured recommendation.
-3. Validate the recommendation against the risk gate.
-4. Require explicit approval before any external action.
-5. Publish to Instagram/TikTok/YouTube only via a verified Composio slug.
+1. Install MetaTrader 5 and log into a broker **demo** account.
+2. Clone this repository to the Windows host.
+3. Create and activate a virtual environment:
 
-## Configuration
-
-```bash
-cp .env.example .env
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+pip install MetaTrader5 anthropic
+copy .env.example .env
 ```
 
-Add your credentials and allowlists in `.env`:
+4. Set `APP_ENV=paper`, `MT5_DEMO_ONLY=true`, the demo terminal path, and a strong `PAPER_EXECUTION_APPROVAL_TOKEN` in `.env`.
+5. Test one cycle without placing an order:
 
-```env
-COMPOSIO_API_KEY=...
-COMPOSIO_USER_ID=...
-GITHUB_OWNER=innocentaluma11-rgb
-GITHUB_REPO=TABERBNACLEFX-
-ALLOWED_SYMBOLS=EURUSD,GBPUSD,USDJPY,XAUUSD
-MAX_DAILY_LOSS=250.0
-MAX_POSITION_SIZE=0.10
-MIN_CONFIDENCE=0.6
-DEFAULT_SOCIAL_PLATFORM=instagram
-COMPOSIO_INSTAGRAM_TOOLKIT=instagram
-COMPOSIO_TIKTOK_TOOLKIT=tiktok
-COMPOSIO_YOUTUBE_TOOLKIT=youtube
+```powershell
+.venv\Scripts\python.exe scheduler.py --once --symbol EURUSD
 ```
 
-Then discover the exact publish slugs for each platform:
+This records the market snapshot, Claude/fallback recommendation, and risk decision in `data/audit.sqlite3`. It does not execute an order.
 
-```bash
-python social_workflow.py discover --platform instagram
-python social_workflow.py discover --platform tiktok
-python social_workflow.py discover --platform youtube
+## Second approval gate
+
+The scheduler never executes by default. To enable the paper order path for one intentional run, supply both flags and the exact token stored in `.env`:
+
+```powershell
+.venv\Scripts\python.exe scheduler.py --once --symbol EURUSD --execute-approved --approval-token "YOUR_TOKEN"
 ```
 
-After verifying the slugs, set them in `.env`, for example:
+The executor still refuses the request unless:
 
-```env
-COMPOSIO_INSTAGRAM_PUBLISH_TOOL=paste_exact_slug_here
+- `APP_ENV=paper`
+- `MT5_DEMO_ONLY=true`
+- risk approval passed
+- the token matches
+- the order signal is `buy` or `sell`
+
+The default background command remains analysis-only:
+
+```powershell
+run_paper_trading.bat
 ```
 
-## Run the workflow
+## Audit log
 
-Preview the recommendation without publishing:
+Inspect recent events with Python:
 
-```bash
-python workflow.py --symbol EURUSD --platform instagram
+```powershell
+.venv\Scripts\python.exe -c "from audit_log import AuditLog; import json; print(json.dumps(AuditLog().recent(), indent=2))"
 ```
 
-Execute the approved action with an explicit and intentional confirmation:
+Keep `data/audit.sqlite3` backed up securely. Do not commit `.env` or credentials.
 
-```bash
-python workflow.py --symbol EURUSD --platform instagram --confirm
-```
+## Important limitation
 
-## Social OAuth and publishing
-
-Connect each platform to Composio:
-
-```bash
-python social_workflow.py connect --platform instagram
-python social_workflow.py connect --platform tiktok
-python social_workflow.py connect --platform youtube
-```
-
-Publish a post only after the exact tool slug is known and `--confirm` is supplied:
-
-```bash
-python social_workflow.py publish --platform instagram --text "Market structure update: EURUSD is cleaning up after a shallow retracement." --confirm
-```
-
-## Safety rules
-
-- MT5 access is read-only unless you add a separate, explicit execution path.
-- The model is not allowed to decide credentials, broker settings, or publish permissions.
-- Social posts require `--confirm`.
-- The risk gate blocks low-confidence or disallowed symbols.
-- Keep all credentials and secrets out of Git.
+The `mt5_execution.py` guard is demo-only, but `mt5.order_send` still submits an order to the connected broker demo account. Start with `--once` without `--execute-approved`, verify the audit record, and use a minimal demo volume before testing the second gate.
