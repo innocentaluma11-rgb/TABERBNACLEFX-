@@ -1,8 +1,8 @@
-# TABERBNACLEFX- + Composio GitHub
+# TABERBNACLEFX- + Composio GitHub, MT5, and social workflow
 
-This repo contains a small Python client for connecting Composio to GitHub. It can start the GitHub OAuth flow, list the tools exposed to the connected account, read repository metadata, and create an issue.
+This Python repo provides a safe starting point for connecting Composio to GitHub and to social toolkits for Instagram, TikTok, and YouTube. It does **not** place trades or publish content automatically: every external write requires an explicit command and confirmation.
 
-## Setup
+## Install and configure
 
 ```bash
 python -m venv .venv
@@ -11,51 +11,64 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Set `COMPOSIO_API_KEY` in `.env`. Keep `.env` local; it is ignored by Git. `COMPOSIO_USER_ID` identifies the Composio user whose GitHub connection will be used.
+Set `COMPOSIO_API_KEY` and `COMPOSIO_USER_ID` in `.env`. Never commit `.env`, API keys, broker credentials, or refresh tokens.
 
-## Connect GitHub
+## Social connection workflow
 
-Run:
+Connect each account in the browser:
+
+```bash
+python social_workflow.py connect --platform instagram
+python social_workflow.py connect --platform tiktok
+python social_workflow.py connect --platform youtube
+```
+
+Discover the actions actually available in your Composio workspace. Tool names can vary by SDK/catalog version, so do not hard-code an unverified slug:
+
+```bash
+python social_workflow.py discover --platform instagram
+python social_workflow.py discover --platform tiktok
+python social_workflow.py discover --platform youtube
+```
+
+Copy the exact publish action into the corresponding `COMPOSIO_*_PUBLISH_TOOL` variable in `.env`. Then make an explicit, real call:
+
+```bash
+python social_workflow.py publish \
+  --platform instagram \
+  --text "Market structure update: BTC is respecting the weekly range." \
+  --media-url "https://example.com/public-image.jpg" \
+  --confirm
+```
+
+The `--confirm` flag is mandatory. Start with a private/test account and verify each platform's media requirements before publishing.
+
+## MT5 + Claude operating model
+
+Use Claude to produce a proposed market-analysis or social-content object, then require a human/risk gate before any side effect:
+
+1. MT5 read-only market data and account state.
+2. Claude analyzes the data and returns structured JSON: `analysis`, `signal`, `risk`, and optional `content`.
+3. Validate position size, stop loss, daily loss, and allowed symbols locally.
+4. Review/approve the trade or content.
+5. Execute one narrowly scoped Composio/MT5/social action.
+6. Log the request, response, approval, and external result without storing secrets.
+
+This repository currently contains the Composio client and social workflow scaffold; it does not yet contain an MT5 execution engine or Claude API client. Add those behind the approval gate rather than allowing an LLM to call a broker or publish directly.
+
+## Existing GitHub flow
 
 ```bash
 python app.py connect
-```
-
-Open the printed URL, authorize GitHub, and return to the terminal. To print the URL without waiting:
-
-```bash
-python app.py connect --no-wait
-```
-
-## First real tool call
-
-After authorization, discover the GitHub tools available to your account:
-
-```bash
 python app.py tools
-```
-
-Then make a real read call against this repository through Composio:
-
-```bash
 python app.py repo
 ```
 
-The command tries the compatible repository-read slug returned by the installed SDK (`GITHUB_GET_REPOSITORY`, `GITHUB_GET_REPO`, or `GITHUB_GET_REPOS`).
+To create a GitHub issue, use the explicit write command documented in `app.py`/the prior README version.
 
-## Optional write call
+## Safety notes
 
-After verifying the read call, create an issue only when you intend to perform a real write:
-
-```bash
-python app.py issue \
-  --title "Composio integration test" \
-  --body "Created by the TABERBNACLEFX- Composio GitHub demo."
-```
-
-## Troubleshooting
-
-- If `connect` is unavailable, upgrade the SDK: `pip install --upgrade composio`.
-- If authentication fails, reconnect GitHub and verify `COMPOSIO_USER_ID`.
-- If a tool name is not found, run `python app.py tools` and use the exact slug shown by your SDK version.
-- Never commit `COMPOSIO_API_KEY` or `.env`.
+- Keep trading in paper/demo mode until the full path is tested.
+- Do not let Claude decide credentials, account IDs, leverage, or publish permissions.
+- Do not auto-publish trade calls or performance claims without review.
+- Use allowlists for symbols, platforms, and Composio action slugs.
