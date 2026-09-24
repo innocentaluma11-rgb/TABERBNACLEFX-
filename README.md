@@ -1,29 +1,45 @@
-# TABERBNACLEFX- + Composio GitHub, MT5, and social workflow
+# TABERBNACLEFX- + Composio GitHub + MT5 + social architecture
 
-This Python repo provides a safe starting point for connecting Composio to GitHub and to social toolkits for Instagram, TikTok, and YouTube. It does **not** place trades or publish content automatically: every external write requires an explicit command and confirmation.
+This repo now includes a layered architecture for a disciplined trading-and-publishing workflow:
 
-## Install and configure
+- `mt5_service.py` reads market/account information, with a read-only demo fallback when MT5 is not installed or connected.
+- `claude_service.py` produces a structured recommendation from the market and account context.
+- `risk_policy.py` gate-keeps the recommendation with a conservative safety model.
+- `workflow.py` orchestrates the end-to-end decision path and blocks unsafe actions.
+- `social_workflow.py` handles the Composio social-tool OAuth and publish flow.
+
+## Safe control flow
+
+1. Read market + account state from MT5 or demo data.
+2. Ask Claude for a structured recommendation.
+3. Validate the recommendation against the risk gate.
+4. Require explicit approval before any external action.
+5. Publish to Instagram/TikTok/YouTube only via a verified Composio slug.
+
+## Configuration
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Set `COMPOSIO_API_KEY` and `COMPOSIO_USER_ID` in `.env`. Never commit `.env`, API keys, broker credentials, or refresh tokens.
+Add your credentials and allowlists in `.env`:
 
-## Social connection workflow
-
-Connect each account in the browser:
-
-```bash
-python social_workflow.py connect --platform instagram
-python social_workflow.py connect --platform tiktok
-python social_workflow.py connect --platform youtube
+```env
+COMPOSIO_API_KEY=...
+COMPOSIO_USER_ID=...
+GITHUB_OWNER=innocentaluma11-rgb
+GITHUB_REPO=TABERBNACLEFX-
+ALLOWED_SYMBOLS=EURUSD,GBPUSD,USDJPY,XAUUSD
+MAX_DAILY_LOSS=250.0
+MAX_POSITION_SIZE=0.10
+MIN_CONFIDENCE=0.6
+DEFAULT_SOCIAL_PLATFORM=instagram
+COMPOSIO_INSTAGRAM_TOOLKIT=instagram
+COMPOSIO_TIKTOK_TOOLKIT=tiktok
+COMPOSIO_YOUTUBE_TOOLKIT=youtube
 ```
 
-Discover the actions actually available in your Composio workspace. Tool names can vary by SDK/catalog version, so do not hard-code an unverified slug:
+Then discover the exact publish slugs for each platform:
 
 ```bash
 python social_workflow.py discover --platform instagram
@@ -31,44 +47,46 @@ python social_workflow.py discover --platform tiktok
 python social_workflow.py discover --platform youtube
 ```
 
-Copy the exact publish action into the corresponding `COMPOSIO_*_PUBLISH_TOOL` variable in `.env`. Then make an explicit, real call:
+After verifying the slugs, set them in `.env`, for example:
 
-```bash
-python social_workflow.py publish \
-  --platform instagram \
-  --text "Market structure update: BTC is respecting the weekly range." \
-  --media-url "https://example.com/public-image.jpg" \
-  --confirm
+```env
+COMPOSIO_INSTAGRAM_PUBLISH_TOOL=paste_exact_slug_here
 ```
 
-The `--confirm` flag is mandatory. Start with a private/test account and verify each platform's media requirements before publishing.
+## Run the workflow
 
-## MT5 + Claude operating model
-
-Use Claude to produce a proposed market-analysis or social-content object, then require a human/risk gate before any side effect:
-
-1. MT5 read-only market data and account state.
-2. Claude analyzes the data and returns structured JSON: `analysis`, `signal`, `risk`, and optional `content`.
-3. Validate position size, stop loss, daily loss, and allowed symbols locally.
-4. Review/approve the trade or content.
-5. Execute one narrowly scoped Composio/MT5/social action.
-6. Log the request, response, approval, and external result without storing secrets.
-
-This repository currently contains the Composio client and social workflow scaffold; it does not yet contain an MT5 execution engine or Claude API client. Add those behind the approval gate rather than allowing an LLM to call a broker or publish directly.
-
-## Existing GitHub flow
+Preview the recommendation without publishing:
 
 ```bash
-python app.py connect
-python app.py tools
-python app.py repo
+python workflow.py --symbol EURUSD --platform instagram
 ```
 
-To create a GitHub issue, use the explicit write command documented in `app.py`/the prior README version.
+Execute the approved action with an explicit and intentional confirmation:
 
-## Safety notes
+```bash
+python workflow.py --symbol EURUSD --platform instagram --confirm
+```
 
-- Keep trading in paper/demo mode until the full path is tested.
-- Do not let Claude decide credentials, account IDs, leverage, or publish permissions.
-- Do not auto-publish trade calls or performance claims without review.
-- Use allowlists for symbols, platforms, and Composio action slugs.
+## Social OAuth and publishing
+
+Connect each platform to Composio:
+
+```bash
+python social_workflow.py connect --platform instagram
+python social_workflow.py connect --platform tiktok
+python social_workflow.py connect --platform youtube
+```
+
+Publish a post only after the exact tool slug is known and `--confirm` is supplied:
+
+```bash
+python social_workflow.py publish --platform instagram --text "Market structure update: EURUSD is cleaning up after a shallow retracement." --confirm
+```
+
+## Safety rules
+
+- MT5 access is read-only unless you add a separate, explicit execution path.
+- The model is not allowed to decide credentials, broker settings, or publish permissions.
+- Social posts require `--confirm`.
+- The risk gate blocks low-confidence or disallowed symbols.
+- Keep all credentials and secrets out of Git.
