@@ -1,15 +1,8 @@
-# TABERBNACLEFX- + Composio
+# TABERBNACLEFX- + Composio GitHub
 
-This repository now includes a minimal Python app that connects to the Composio GitHub toolkit and makes a real tool call against the GitHub integration.
+This repo contains a small Python client for connecting Composio to GitHub. It can list the available GitHub tools, read repository metadata, and create an issue after you authorize GitHub in Composio.
 
-## What is included
-
-- `app.py` – initializes Composio and executes a GitHub tool call
-- `requirements.txt` – adds the Composio Python SDK
-- `.env.example` – sample environment variables
-- `.gitignore` – ignores local secrets
-
-## 1) Set up the environment
+## Setup
 
 ```bash
 python -m venv .venv
@@ -18,7 +11,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Then fill in your values in `.env`:
+In `.env`, set your Composio API key and connected-user ID:
 
 ```env
 COMPOSIO_API_KEY=your_api_key_here
@@ -27,44 +20,38 @@ GITHUB_OWNER=innocentaluma11-rgb
 GITHUB_REPO=TABERBNACLEFX-
 ```
 
-## 2) Connect the GitHub integration in Composio
+In the Composio dashboard, connect the **GitHub** toolkit and authorize the GitHub account that should be used. Keep `.env` local; it is ignored by Git.
 
-1. Log in to the Composio Dashboard.
-2. Add the GitHub integration.
-3. Authorize the GitHub account you want this app to use.
-4. Copy the API key to `COMPOSIO_API_KEY`.
-5. Use the connected user identifier for `COMPOSIO_USER_ID`.
+## First real GitHub tool call
 
-## 3) Run the app
+List the GitHub tools exposed to your connected account:
 
 ```bash
-python app.py
+python app.py tools
 ```
 
-This should:
+Then read this repository through Composio:
 
-1. List GitHub tools available to the user
-2. Execute a GitHub repo metadata call
-3. Print the result from the first real tool call
-
-## 4) Example output
-
-```text
-Listing GitHub tools for user ID: user-123
-[...] 
-
-Making a real GitHub tool call for innocentaluma11-rgb/TABERBNACLEFX-
-{'name': 'TABERBNACLEFX-', ...}
+```bash
+python app.py repo
 ```
 
-## What to try next
+The command uses the first compatible repository-read slug returned by the installed SDK (`GITHUB_GET_REPOSITORY`, `GITHUB_GET_REPO`, or `GITHUB_GET_REPOS`).
 
-- Replace the GitHub tool with Slack, Gmail, Notion, or Google Sheets
-- Add a `toolkits=["slack"]` call and use `client.tools.execute(...)`
-- Add a local `FastAPI` endpoint to trigger Composio actions from HTTP requests
-- Add auth checks and a proper config loader for production
-- Add logging and retries around tool execution
+## Optional write call: create an issue
 
-## Notes
+After verifying the read call, create an issue:
 
-The exact Composio tool slug names can vary a little by SDK version, so if you see a tool-name mismatch, print the `tools.get(...)` result and use the exact slug returned by the SDK.
+```bash
+python app.py issue \
+  --title "Composio integration test" \
+  --body "Created by the TABERBNACLEFX- Composio GitHub demo."
+```
+
+This performs a real write against `GITHUB_OWNER/GITHUB_REPO`, so only run it when you intend to create the issue.
+
+## Troubleshooting
+
+- If authentication fails, reconnect GitHub in Composio and verify `COMPOSIO_USER_ID`.
+- If a tool name is not found, run `python app.py tools` and use the exact slug shown by your SDK version.
+- Never commit `COMPOSIO_API_KEY` or `.env`.
